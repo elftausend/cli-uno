@@ -29,7 +29,15 @@ fn set_cards(player: Arc<Mutex<Player>>, a: String) {
 fn receive_cards(player: Arc<Mutex<Player>>, card_data: Vec<u8>, n: usize) {
     std::thread::spawn(move || {
         let a = String::from_utf8_lossy(&card_data[..n-1]).to_string();
-        set_cards(player ,a);
+        set_cards(player, a);
+    });
+}
+
+fn receive_shown(player: Arc<Mutex<Player>>, shown_data: Vec<u8>, n: usize) {
+    std::thread::spawn(move || {
+        let card = String::from_utf8_lossy(&shown_data[..n-1]).to_string();
+        println!("Shown card: {}", card);
+        player.lock().unwrap().shown = card;
     });
 }
 
@@ -43,7 +51,11 @@ pub fn listen(stream: TcpStream) {
             Ok(n) => {
                 let player1 = player.clone();
                 if vec[n-1] == 1 {
-                    receive_cards(player1, vec.clone(), n);
+                    receive_cards(player1.clone(), vec.clone(), n);
+                }
+
+                if vec[n-1] == 2 {
+                    receive_shown(player1.clone(), vec.clone(), n);
                 }
 
             },

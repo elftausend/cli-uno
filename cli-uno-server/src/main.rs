@@ -52,7 +52,9 @@ async fn sync_card(player: Arc<Mutex<Player>>) {
     //wait_till_clear(&mut player.stream).await;
 }
 
-async fn check_for_ready(players: Arc<Mutex<Vec<Arc<Mutex<Player>>>>>) -> bool {
+type Players = Arc<Mutex<Vec<Arc<Mutex<Player>>>>>;
+
+async fn check_for_ready(players: Players) -> bool {
     let players = players.lock().await;
 
     std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
@@ -71,12 +73,25 @@ async fn check_for_ready(players: Arc<Mutex<Vec<Arc<Mutex<Player>>>>>) -> bool {
 
 }
 
-async fn game_loop(players: Arc<Mutex<Vec<Arc<Mutex<Player>>>>>) {
+async fn sync_shown(players: Players, card: &str) {
+    for player in players.lock().await.iter_mut() {
+        let mut bytes = card.as_bytes().to_vec();
+        bytes.push(2);
+        player.lock().await.stream.write_all(&bytes).await.unwrap();
+        
+     //   wait_till_clear(stream).await;
+    }
+    
+}
+
+
+async fn game_loop(players: Players) {
+    let card = rand_card();
     let mut ready = false;
     
     loop {
         if ready {  
-            //sync_shown(&card).await;
+            sync_shown(players, &card).await;
             break;
         }
         ready = check_for_ready(players.clone()).await;
