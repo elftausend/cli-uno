@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use rand::Rng;
-use tokio::{net::{TcpListener, TcpStream}, sync::Mutex};
+use tokio::{net::{TcpListener, TcpStream}, sync::Mutex, io::AsyncWriteExt};
 
 const IPPORT: &str = "127.0.0.1:11000";
-const MIN_USERS: usize = 4;
+const MIN_USERS: usize = 1;
 pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "ge", "gr"];
 pub const CARD_COUNT: usize = 5;
 
@@ -14,8 +14,6 @@ pub fn rand_card() -> String {
     let color = COLOR_ARRAY[rng.gen_range(0..4)];
     num.to_string() + color
 }
-
-
 
 #[derive(Debug)]
 pub struct Player {
@@ -42,6 +40,18 @@ impl Player {
     }
 }
 
+async fn sync_card(player: Arc<Mutex<Player>>) {
+    let mut cards = Vec::<Vec<u8>>::new();
+    
+    for card in &player.lock().await.cards {
+        cards.push(card.as_bytes().to_vec());
+        cards.push("|".as_bytes().to_vec())
+    }
+    cards.push(vec![1]);
+    player.lock().await.stream.write_all(&cards.concat()).await.unwrap();
+    //wait_till_clear(&mut player.stream).await;
+}
+
 async fn check_for_ready(players: Arc<Mutex<Vec<Arc<Mutex<Player>>>>>) -> bool {
     let players = players.lock().await;
 
@@ -65,12 +75,13 @@ async fn game_loop(players: Arc<Mutex<Vec<Arc<Mutex<Player>>>>>) {
     let mut ready = false;
     
     loop {
-        if ready {
+        if ready {  
             //sync_shown(&card).await;
             break;
         }
         ready = check_for_ready(players.clone()).await;
     }
+    println!("ready!");
 }
 
 
@@ -99,6 +110,8 @@ async fn main() {
 }
 
 async fn handle_client(player: Arc<Mutex<Player>>) {
+    sync_card(player.clone()).await;
+
     std::thread::sleep(std::time::Duration::from_secs(2));
     player.lock().await.ready = true;
     println!("spawn");
