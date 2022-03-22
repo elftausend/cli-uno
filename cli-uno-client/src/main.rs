@@ -93,7 +93,13 @@ fn set_cards(player: &mut Player, a: String) {
     player.cards = cards;
 }
 
-fn listen_no(mut player: Player) {
+fn print_shown(card: &str) {
+    print!("Shown card: ");
+    colored_card_print(card, "");
+    println!();
+}
+
+fn listen(mut player: Player) {
     let mut vec = vec![0u8; BUFFER];
 
     loop {
@@ -107,9 +113,8 @@ fn listen_no(mut player: Player) {
                 }
                 if vec[n-1] == 2 {
                     let card = String::from_utf8_lossy(&vec[..n-1]).to_string();
-                    print!("Shown card: ");
-                    colored_card_print(&card, "");
-                    println!();
+                    
+                    print_shown(&card);
                     
                     player.shown = card;
                     player.stream.write_all(&[5u8]).unwrap();
@@ -130,8 +135,13 @@ fn listen_no(mut player: Player) {
                             let n = player.stream.read(&mut read).unwrap();
                             player.stream.write_all(&[5u8]).unwrap();
 
-                            let a = String::from_utf8_lossy(&read[..n-1]).to_string();
-                            set_cards(&mut player, a);
+                            let cards = String::from_utf8_lossy(&read[..n-1]).to_string();
+                            set_cards(&mut player, cards);
+
+                            let n = player.stream.read(&mut read).unwrap();
+                            let shown = String::from_utf8_lossy(&read[..n-1]).to_string();
+                            print_shown(&shown);
+                            player.stream.write_all(&[5u8]).unwrap();
 
                         } else if player.cards.contains(&input.to_string()) {
                             if card_check(input, &player.shown) {
@@ -162,6 +172,6 @@ fn main() {
 
     let stream = std::net::TcpStream::connect(IPPORT).unwrap();
 
-    listen_no(Player::new(stream));
+    listen(Player::new(stream));
     
 }

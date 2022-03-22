@@ -4,7 +4,7 @@ use rand::Rng;
 use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, RwLock}, io::{AsyncWriteExt, AsyncReadExt}};
 
 const IPPORT: &str = "127.0.0.1:11000";
-const MIN_USERS: usize = 1;
+const MIN_USERS: usize = 2;
 pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "y", "g"];
 pub const CARD_COUNT: usize = 5;
 
@@ -73,6 +73,16 @@ async fn check_for_ready(players: Players) -> bool {
 
 }
 
+async fn sync_shown_p(player: Arc<Mutex<Player>>, card: &str) {
+    
+    let mut bytes = card.as_bytes().to_vec();
+    bytes.push(2);
+    player.lock().await.stream.write_all(&bytes).await.unwrap();
+    wait_till_clear(&mut player.lock().await.stream).await;
+    
+
+}
+
 async fn sync_shown(players: Players, card: &str) {
     for player in players.write().await.iter_mut() {
         let mut bytes = card.as_bytes().to_vec();
@@ -80,8 +90,7 @@ async fn sync_shown(players: Players, card: &str) {
         player.lock().await.stream.write_all(&bytes).await.unwrap();
         wait_till_clear(&mut player.lock().await.stream).await;
      //   wait_till_clear(stream).await;
-    }
-    
+    }   
 }
 
 pub async fn wait_till_clear(stream: &mut TcpStream) {
@@ -114,6 +123,8 @@ async fn game_loop(players: Players) {
         }
         ready = check_for_ready(players.clone()).await;
     }
+
+    let mut pre_shown = card;
     
     loop {
         
@@ -136,6 +147,7 @@ async fn game_loop(players: Players) {
                     let abheben_card = rand_card();
                     player.lock().await.cards.push(abheben_card);
                     sync_card(player.clone()).await;
+                    sync_shown_p(player.clone(), &pre_shown).await;
                     println!("abheben");
                     continue;
                 }
@@ -159,6 +171,7 @@ async fn game_loop(players: Players) {
                     
                 }
                 sync_shown(players.clone(), &card).await;
+                pre_shown = card;
 
                 //std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
                 sync_card(player.clone()).await;
@@ -199,7 +212,7 @@ async fn main() {
 async fn handle_client(player: Arc<Mutex<Player>>) {
     sync_card(player.clone()).await;
 
-    std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
+    //std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
     player.lock().await.ready = true;
     
 }
