@@ -1,24 +1,37 @@
-use std::{net::TcpStream, io::{Read, BufRead, Write}, sync::{Mutex, Arc}};
+use std::{net::TcpStream, io::{Read, Write, BufRead}};
 
+
+//const IPPORT: &str = "10.30.0.137:12000";
 const IPPORT: &str = "127.0.0.1:11000";
-const BUFFER: usize = 256;
 
-
-fn main() {
-    let stream = std::net::TcpStream::connect(IPPORT).unwrap();
-
-    listen(stream);
-
+/*
+pub async fn wait_till_clear(stream: &mut TcpStream) {
+    let mut buf = [0u8; 1];
+    loop {
+        match stream.read(&mut buf) {
+            Ok(n) => {
+                if n != 0 {
+                    if buf.first().unwrap() == &5 {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            Err(_) => {}
+        }
+    }
 }
+*/
 
 pub struct Player {
     cards: Vec<String>,
     shown: String,
-    stream: Arc<TcpStream>,
+    stream: TcpStream,
 }
 
 impl Player {
-    pub fn new(stream: Arc<TcpStream>) -> Player {
+    pub fn new(stream: TcpStream) -> Player {
         Player {
             cards: Vec::new(),
             shown: String::new(),
@@ -26,6 +39,9 @@ impl Player {
         }
     }
 }
+
+pub static mut PLAYER: Option<Player> = None;
+const BUFFER: usize = 256;
 
 pub fn card_check(selected: &str, shown: &str) -> bool {
     if selected == shown {
@@ -46,162 +62,139 @@ pub fn card_check(selected: &str, shown: &str) -> bool {
 
 }
 
-fn set_cards(player: Arc<Mutex<Player>>, a: String) {
-    let mut player_guard = player.lock().unwrap();
+fn set_cards(a: String) {
     let mut cards = a.split('|').map(|card| card.to_string()).collect::<Vec<String>>();
     cards.remove(cards.len()-1);
     println!("cards: {:?}", cards);
-    {
-        player_guard.cards = cards;
+    unsafe {
+        PLAYER.as_mut().unwrap().cards = cards;
     }
-    println!("set cards");
-    
-}
-
-fn receive_cards(player: Arc<Mutex<Player>>, card_data: Vec<u8>, n: usize) {
-    std::thread::spawn(move || {
-        let a = String::from_utf8_lossy(&card_data[..n-1]).to_string();
-        set_cards(player, a);
-    });
-}
-
-fn receive_shown(player: Arc<Mutex<Player>>, shown_data: Vec<u8>, n: usize) {
-    std::thread::spawn(move || {
-        let card = String::from_utf8_lossy(&shown_data[..n-1]).to_string();
-        println!("Shown card: {}", card);
-        {
-            player.lock().unwrap().shown = card;
-        }
-        println!("set shown");
-    });
-}
-
-fn receive_selecting(player: Arc<Mutex<Player>>) {
-    std::thread::spawn(move || {
-        
-        println!("select");
-        
-        loop {
-            println!("Select a card [card from deck or 'abheben']:");
-            let guard = player.lock().unwrap();
-            let cards = guard.cards.clone();
-            let shown = guard.shown.clone();
-            
-            let a = Arc::as_ptr(&guard.stream);
-            let stream = unsafe {&mut *(a as *mut TcpStream)};
-
-            drop(guard);
-
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).unwrap();
-            let input = input.trim();
-
-            if input == "abheben" {                
-                stream.write_all(&[6, 6, 6, 6, 6, 6, 6, 6,]).unwrap();
-
-            } else {                
-                if cards.contains(&input.to_string()) {
-                    if card_check(input, &shown) {
-
-                        stream.write_all(input.as_bytes()).unwrap();
-                        break;
-                    } else {
-                        println!("This card cannot be placed on the shown card {}!", shown);
-                    }
-                } else {
-                    println!("Invalid card!");
-                }
-            }
-        }
-    });
 }
 
 
-pub fn listen(stream: TcpStream) {
+fn listen(stream: &mut TcpStream) {
     let mut vec = vec![0u8; BUFFER];
 
-    let stream = Arc::new(stream);
-
-    let a = Arc::as_ptr(&stream);
-    let s = a as *mut TcpStream;
-    
-    
-    let player = Arc::new(Mutex::new(Player::new(stream.clone())));
-    
     loop {
-        let player_mutex_clone = Arc::clone(&player);
-        let n = unsafe {
-            let n = match Read::read(&mut *s, &mut vec) {
-                Ok(n) => {
-                    n
-                },
-                Err(_) => todo!(),
-            };
-            n
-        };
-        
-    
-        if vec[n-1] == 1 {
-            receive_cards(player_mutex_clone.clone(), vec.clone(), n);
-        }
-        
-        if vec[n-1] == 2 {
-            receive_shown(player_mutex_clone.clone(), vec.clone(), n);
-        }
-
-        if vec[n-1] == 3 {
-            receive_selecting(player_mutex_clone);
-        }
-        /* 
-        let player1 = player.clone();
-        match player1.lock().unwrap().stream.read(&mut vec) {
+        match stream.read(&mut vec) {
             Ok(n) => {
-                {
-                    let a = &player.lock().unwrap().cards;
-                    println!("a: {:?}", a);
-                }
                 if vec[n-1] == 1 {
-                    receive_cards(player.clone(), vec.clone(), n);
+                    let a = String::from_utf8_lossy(&vec[..n-1]).to_string();
+                    set_cards(a);
+                    stream.write_all(&vec!(5u8)).unwrap();
+                    
                 }
-
                 if vec[n-1] == 2 {
-                    receive_shown(player.clone(), vec.clone(), n);
+                    let card = String::from_utf8_lossy(&vec[..n-1]).to_string();
+                    println!("Shown card: {}", card);
+                    unsafe {
+                        PLAYER.as_mut().unwrap().shown = card;
+                    }
+                    stream.write_all(&vec!(5u8)).unwrap();
+                    
                 }
-
                 if vec[n-1] == 3 {
-                    //receive_selecting(player1.clone());
-                }
+                    unsafe {
+                        let cards = &PLAYER.as_ref().unwrap().cards;
+                        let shown = &PLAYER.as_ref().unwrap().shown;
+                        
+                        //println!("cards: {:?}, shown: {}", cards, shown);
+                        loop {
+                            println!("Select a card [card from deck or 'abheben']:");
+                        
+                            let mut input = String::new();
+                            std::io::stdin().lock().read_line(&mut input).unwrap();
+                            let input = input.trim();
+                            
+                            if input == "abheben" {
+                                let mut read = vec![0u8; BUFFER];
+                                
+                                PLAYER.as_mut().unwrap().stream.write_all(&[6, 6, 6, 6, 6, 6, 6, 6,]).unwrap();
+                                let n = PLAYER.as_mut().unwrap().stream.read(&mut read).unwrap();
+                                stream.write_all(&vec!(5u8)).unwrap();
 
-            },
-            Err(_) => todo!(),
-        };
-        */
-        /*
-        let mut guard = player.lock().unwrap();
-        match guard.stream.read(&mut vec) {
-            Ok(n) => {
-                //let player1 = player.clone();
-                drop(guard);
-                {
-                    let a = &player.lock().unwrap().cards;
-                    println!("a: {:?}", a);
-                }
-                if vec[n-1] == 1 {
-                    receive_cards(player.clone(), vec.clone(), n);
-                }
+                                let a = String::from_utf8_lossy(&read[..n-1]).to_string();
+                                set_cards(a);
 
-                if vec[n-1] == 2 {
-                    receive_shown(player.clone(), vec.clone(), n);
+                            } else {
+                                if cards.contains(&input.to_string()) {
+                                    if card_check(input, &PLAYER.as_ref().unwrap().shown) {
+                                        PLAYER.as_mut().unwrap().stream.write_all(input.as_bytes()).unwrap();
+                                        break;
+                                    } else {
+                                        println!("This card cannot be placed on the shown card {}!", PLAYER.as_ref().unwrap().shown);
+                                    }
+                                
+                                } else {
+                                    println!("Invalid card!");
+                                    continue;
+                                }
+                            }
+                         
+                        }
+       
+                    }
+                    
+                    //let cards = unsafe {&PLAYER.as_ref().unwrap().cards};
                 }
-
-                if vec[n-1] == 3 {
-                    //receive_selecting(player1.clone());
-                }
-
+                //println!("pass");
+                vec = vec![0u8; BUFFER];
             },
             Err(_) => todo!(),
         }
-        */
     }
 }
 
+fn main() {
+    
+
+    let stream = std::net::TcpStream::connect(IPPORT).unwrap();
+
+    
+    unsafe {
+        /* 
+        let builder = std::thread::Builder::new();
+        builder.spawn(move || {
+            loop {
+                //let cards = &PLAYER.as_ref().unwrap().cards;
+                //let shown = &PLAYER.as_ref().unwrap().shown;
+                //println!("cards: {:?}, shown: {}", cards, shown);
+                std::thread::sleep(std::time::Duration::from_secs(4));
+            }
+
+                
+        }).unwrap();
+
+        let builder = std::thread::Builder::new();
+        builder.spawn(move || {
+            loop {
+                
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input).unwrap();
+
+                let cards = &PLAYER.as_ref().unwrap().cards;
+//                println!("cards2: {:?}", cards);
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+
+                
+        }).unwrap();
+        */
+    
+        PLAYER = Some(Player::new(stream));
+    
+        listen(&mut PLAYER.as_mut().unwrap().stream)
+        
+
+        /* 
+        std::thread::spawn(move || {
+            
+        });
+        */
+       // tokio::spawn(async move {
+            
+        //});
+        
+    }
+    
+}
