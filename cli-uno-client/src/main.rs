@@ -52,7 +52,8 @@ pub fn card_check(selected: &str, shown: &str) -> bool {
 
     if sel_chars[0] == shown_chars[0] {
         return true;
-    } else if sel_chars[1] == shown_chars[1] {
+    } 
+    if sel_chars[1] == shown_chars[1] {
         return true;
     }
     false
@@ -101,7 +102,7 @@ fn listen_no(mut player: Player) {
                 if vec[n-1] == 1 {
                     let a = String::from_utf8_lossy(&vec[..n-1]).to_string();
                     set_cards(&mut player, a);
-                    player.stream.write_all(&vec!(5u8)).unwrap();
+                    player.stream.write_all(&[5u8]).unwrap();
                     
                 }
                 if vec[n-1] == 2 {
@@ -111,7 +112,7 @@ fn listen_no(mut player: Player) {
                     println!();
                     
                     player.shown = card;
-                    player.stream.write_all(&vec!(5u8)).unwrap();
+                    player.stream.write_all(&[5u8]).unwrap();
                     
                 }
                 if vec[n-1] == 3 {                    
@@ -127,25 +128,24 @@ fn listen_no(mut player: Player) {
                             
                             player.stream.write_all(&[6, 6, 6, 6, 6, 6, 6, 6,]).unwrap();
                             let n = player.stream.read(&mut read).unwrap();
-                            player.stream.write_all(&vec!(5u8)).unwrap();
+                            player.stream.write_all(&[5u8]).unwrap();
 
                             let a = String::from_utf8_lossy(&read[..n-1]).to_string();
                             set_cards(&mut player, a);
 
-                        } else {
-                            if player.cards.contains(&input.to_string()) {
-                                if card_check(input, &player.shown) {
-                                    player.stream.write_all(input.as_bytes()).unwrap();
-                                    break;
-                                } else {
-                                    println!("This card cannot be placed on the shown card {}!", player.shown);
-                                }
-                            
+                        } else if player.cards.contains(&input.to_string()) {
+                            if card_check(input, &player.shown) {
+                                player.stream.write_all(input.as_bytes()).unwrap();
+                                break;
                             } else {
-                                println!("Invalid card!");
-                                continue;
+                                println!("This card cannot be placed on the shown card {}!", player.shown);
                             }
+                        
+                        } else {
+                            println!("Invalid card!");
+                            continue;
                         }
+                        
                         
                     }
                
