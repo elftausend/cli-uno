@@ -5,7 +5,7 @@ use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, RwLock}, io::{AsyncWrit
 
 const IPPORT: &str = "127.0.0.1:11000";
 const MIN_USERS: usize = 1;
-pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "ge", "gr"];
+pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "y", "g"];
 pub const CARD_COUNT: usize = 5;
 
 pub fn rand_card() -> String {
