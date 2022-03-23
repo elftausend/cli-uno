@@ -4,10 +4,10 @@ use rand::Rng;
 use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, RwLock}, io::{AsyncWriteExt, AsyncReadExt}};
 
 const IPPORT: &str = "172.23.1.152:11000";
-const MIN_USERS: usize = 2;
+const MIN_USERS: usize = 4;
 
 pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "y", "g"];
-pub const CARD_COUNT: usize = 1;
+pub const CARD_COUNT: usize = 5;
 
 pub fn rand_card() -> String {
     let mut rng = rand::thread_rng();
@@ -80,8 +80,6 @@ async fn sync_shown_p(player: Arc<Mutex<Player>>, card: &str) {
     bytes.push(2);
     player.lock().await.stream.write_all(&bytes).await.unwrap();
     wait_till_clear(&mut player.lock().await.stream).await;
-    
-
 }
 
 async fn sync_shown(players: Players, card: &str) {

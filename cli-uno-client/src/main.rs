@@ -2,7 +2,7 @@ use std::{net::TcpStream, io::{Read, Write, BufRead}};
 
 //const IPPORT: &str = "10.30.0.137:12000";
 const IPPORT: &str = "172.23.1.152:11000";
-const BUFFER: usize = 256;
+const BUFFER: usize = 1024;
 
 /*
 pub async fn wait_till_clear(stream: &mut TcpStream) {
