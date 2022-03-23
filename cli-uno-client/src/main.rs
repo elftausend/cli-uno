@@ -1,7 +1,7 @@
 use std::{net::TcpStream, io::{Read, Write, BufRead}};
 
 //const IPPORT: &str = "10.30.0.137:12000";
-const IPPORT: &str = "127.0.0.1:11000";
+const IPPORT: &str = "172.23.1.152:11000";
 const BUFFER: usize = 256;
 
 /*
@@ -142,6 +142,12 @@ fn listen(mut player: Player) {
                     player.stream.write_all(&[5u8]).unwrap();
                 }
 
+                if vec[n-1] == 12 {
+                    let current_player = String::from_utf8_lossy(&vec[..n-1]).to_string();
+                    println!("\x1B[1;93m{}\x1B[0m has won this round!", current_player.trim_end());
+                    player.stream.write_all(&[5u8]).unwrap();
+                }
+
                 //game "logic"
                 if vec[n-1] == 3 {                    
                     loop {
@@ -182,6 +188,11 @@ fn listen(mut player: Player) {
                         
                     }
                
+                }
+
+                //terminate client
+                if vec[n-1] == 255 {
+                    std::process::exit(0);
                 }
                 vec = vec![0u8; BUFFER];
             },

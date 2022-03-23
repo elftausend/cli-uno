@@ -3,11 +3,11 @@ use std::sync::Arc;
 use rand::Rng;
 use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, RwLock}, io::{AsyncWriteExt, AsyncReadExt}};
 
-const IPPORT: &str = "127.0.0.1:11000";
+const IPPORT: &str = "172.23.1.152:11000";
 const MIN_USERS: usize = 2;
 
 pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "y", "g"];
-pub const CARD_COUNT: usize = 5;
+pub const CARD_COUNT: usize = 1;
 
 pub fn rand_card() -> String {
     let mut rng = rand::thread_rng();
@@ -125,6 +125,15 @@ async fn send_current_player(players: Players, username: &str) {
     }   
 }
 
+async fn send_winner_info(players: Players, winner_name: &str) {
+    for player in players.write().await.iter_mut() {
+        let mut bytes = winner_name.as_bytes().to_vec();
+        bytes.push(12);
+        player.lock().await.stream.write_all(&bytes).await.unwrap();
+        wait_till_clear(&mut player.lock().await.stream).await;
+    }
+}
+
 pub async fn wait_till_clear(stream: &mut TcpStream) {
     let mut buf = [0u8; 1];
     loop {
@@ -205,13 +214,33 @@ async fn game_loop(players: Players) {
                 sync_shown(players.clone(), &card).await;
                 pre_shown = card;
                 sync_card(player.clone()).await;
+
+                if let Some(player) = get_winner(players.clone()).await {
+                    let username = player.lock().await.name.clone();
+                    send_winner_info(players.clone(), &username).await;
+                    send_terminate(players.clone()).await;
+                    return;
+                }
             }
         }
-
-        
         //std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
+}
+
+async fn send_terminate(players: Players) {
+    for player in players.write().await.iter_mut() {
+        player.lock().await.stream.write_all(&[255]).await.unwrap();
+    }
+}
+
+async fn get_winner(players: Players) -> Option<Arc<Mutex<Player>>> {
+    for player in players.read().await.iter() {
+        if player.lock().await.cards.len() == 0 {
+            return Some(player.clone());
+        }
+    }
+    None
 }
 
 
@@ -223,7 +252,12 @@ async fn main() {
 
     let game_loop_players = players.clone();
     tokio::spawn(async move {
-        game_loop(game_loop_players).await
+        loop {
+            game_loop(game_loop_players.clone()).await;
+            let mut players = game_loop_players.write().await;
+            players.clear();
+        }
+        
     });
 
     loop {
@@ -253,7 +287,7 @@ async fn read_username(stream: &mut TcpStream) -> String {
 async fn handle_client(player: Arc<Mutex<Player>>) {
     sync_card(player.clone()).await;
 
-    std::thread::sleep(std::time::Duration::from_secs_f32(2.));
+    std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
     player.lock().await.ready = true;
     
 }
