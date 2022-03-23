@@ -135,7 +135,7 @@ fn listen(mut player: Player) {
                 if vec[n-1] == 11 {
                     let all_players = String::from_utf8_lossy(&vec[..n-1]).to_string();
                     print!("\x1B[1;37mPlayers: \x1B[0m");
-                    for player in all_players.split(";") {
+                    for player in all_players.split(';') {
                         print!("{}, ", player.trim()); 
                     }
                     println!();

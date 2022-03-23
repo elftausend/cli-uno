@@ -20,7 +20,6 @@ pub fn rand_card() -> String {
 pub struct Player {
     stream: TcpStream,
     ready: bool,
-    no_cards: bool,
     cards: Vec<String>,
     name: String,
 }
@@ -36,7 +35,6 @@ impl Player {
         Player {
             stream,
             ready: false,
-            no_cards: false,
             cards, 
             name
         }
@@ -104,7 +102,7 @@ async fn send_usernames(players: Players) {
         let guard = player.lock().await;
         bytes.push(guard.name.as_bytes().to_vec());
         if idx < players_read.len()-1 {
-            bytes.push(vec![';' as u8]);
+            bytes.push(vec![b';']);
         }
         
     }
@@ -236,7 +234,7 @@ async fn send_terminate(players: Players) {
 
 async fn get_winner(players: Players) -> Option<Arc<Mutex<Player>>> {
     for player in players.read().await.iter() {
-        if player.lock().await.cards.len() == 0 {
+        if player.lock().await.cards.is_empty() {
             return Some(player.clone());
         }
     }
