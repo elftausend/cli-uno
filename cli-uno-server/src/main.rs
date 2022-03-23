@@ -5,6 +5,7 @@ use tokio::{net::{TcpListener, TcpStream}, sync::{Mutex, RwLock}, io::{AsyncWrit
 
 const IPPORT: &str = "127.0.0.1:11000";
 const MIN_USERS: usize = 2;
+
 pub const COLOR_ARRAY: [&str; 4] = ["r", "b", "y", "g"];
 pub const CARD_COUNT: usize = 5;
 
@@ -21,10 +22,11 @@ pub struct Player {
     ready: bool,
     no_cards: bool,
     cards: Vec<String>,
+    name: String,
 }
 
 impl Player {
-    pub fn new(stream: TcpStream) -> Player {
+    pub fn new(stream: TcpStream, name: String) -> Player {
         let mut cards = Vec::new();
 
         for _ in 0..CARD_COUNT {            
@@ -36,6 +38,7 @@ impl Player {
             ready: false,
             no_cards: false,
             cards, 
+            name
         }
     }
 }
@@ -93,6 +96,35 @@ async fn sync_shown(players: Players, card: &str) {
     }   
 }
 
+async fn send_usernames(players: Players) {
+
+    let mut bytes = Vec::new();
+    let players_read = players.read().await;
+    for (idx, player) in players_read.iter().enumerate() {
+        let guard = player.lock().await;
+        bytes.push(guard.name.as_bytes().to_vec());
+        if idx < players_read.len()-1 {
+            bytes.push(vec![';' as u8]);
+        }
+        
+    }
+    drop(players_read);
+    for player in players.write().await.iter_mut() {
+        bytes.push(vec![11]);
+        player.lock().await.stream.write_all(&bytes.concat()).await.unwrap();
+        wait_till_clear(&mut player.lock().await.stream).await;
+    }   
+}
+
+async fn send_current_player(players: Players, username: &str) {
+    for player in players.write().await.iter_mut() {
+        let mut bytes = username.as_bytes().to_vec();
+        bytes.push(10);
+        player.lock().await.stream.write_all(&bytes).await.unwrap();
+        wait_till_clear(&mut player.lock().await.stream).await;
+    }   
+}
+
 pub async fn wait_till_clear(stream: &mut TcpStream) {
     let mut buf = [0u8; 1];
     loop {
@@ -118,6 +150,7 @@ async fn game_loop(players: Players) {
     
     loop {
         if ready {  
+            send_usernames(players.clone()).await;
             sync_shown(players.clone(), &card).await;
             break;
         }
@@ -133,6 +166,9 @@ async fn game_loop(players: Players) {
 
         drop(players_guard);
         for player in a.iter() {
+            let username = player.lock().await.name.clone();
+            send_current_player(players.clone(), &username).await;
+
             let mut abheben = true;
             player.lock().await.stream.write_all(&[3]).await.unwrap();
             while abheben {
@@ -161,19 +197,13 @@ async fn game_loop(players: Players) {
                     for (idx, value) in guard.cards.iter().enumerate() {
                         if value == &card {
                             drop(guard);    
-                            let mut guard = player.lock().await;
-                            guard.cards.remove(idx);       
-                            drop(guard);
+                            player.lock().await.cards.remove(idx);
                             break;
                         }
-                    }
-                    
-                    
+                    }    
                 }
                 sync_shown(players.clone(), &card).await;
                 pre_shown = card;
-
-                //std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
                 sync_card(player.clone()).await;
             }
         }
@@ -198,8 +228,12 @@ async fn main() {
 
     loop {
         let players = players.clone();
-        let (stream, _) = listener.accept().await.unwrap();
-        let player = Arc::new(Mutex::new(Player::new(stream)));
+        let (mut stream, _) = listener.accept().await.unwrap();
+
+        let username = read_username(&mut stream).await;
+        println!("username: {}", username);
+
+        let player = Arc::new(Mutex::new(Player::new(stream, username)));
         players.write().await.push(player.clone());
         
         //let players1 = players.clone().lock().await[];
@@ -209,10 +243,17 @@ async fn main() {
     }
 }
 
+async fn read_username(stream: &mut TcpStream) -> String {
+    let mut username_bytes = [0u8; 255];
+    stream.read(&mut username_bytes).await.unwrap();
+    let username = String::from_utf8_lossy(&username_bytes).to_string();
+    username.trim_end_matches(char::from(0)).to_string()
+}
+
 async fn handle_client(player: Arc<Mutex<Player>>) {
     sync_card(player.clone()).await;
 
-    //std::thread::sleep(std::time::Duration::from_secs_f32(0.1));
+    std::thread::sleep(std::time::Duration::from_secs_f32(2.));
     player.lock().await.ready = true;
     
 }

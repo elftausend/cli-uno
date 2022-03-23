@@ -97,6 +97,7 @@ fn print_shown(card: &str) {
     print!("Shown card: ");
     colored_card_print(card, "");
     println!();
+    println!();
 }
 
 fn listen(mut player: Player) {
@@ -105,12 +106,14 @@ fn listen(mut player: Player) {
     loop {
         match player.stream.read(&mut vec) {
             Ok(n) => {
+                //receive cards
                 if vec[n-1] == 1 {
                     let a = String::from_utf8_lossy(&vec[..n-1]).to_string();
                     set_cards(&mut player, a);
                     player.stream.write_all(&[5u8]).unwrap();
                     
                 }
+                //receive shown card
                 if vec[n-1] == 2 {
                     let card = String::from_utf8_lossy(&vec[..n-1]).to_string();
                     
@@ -120,6 +123,26 @@ fn listen(mut player: Player) {
                     player.stream.write_all(&[5u8]).unwrap();
                     
                 }
+
+                //receive current player
+                if vec[n-1] == 10 {
+                    let current_player = String::from_utf8_lossy(&vec[..n-1]).to_string();
+                    println!("\x1B[1;94m{}\x1B[0m plays..", current_player.trim_end());
+                    player.stream.write_all(&[5u8]).unwrap();
+                }
+
+                //receive all players
+                if vec[n-1] == 11 {
+                    let all_players = String::from_utf8_lossy(&vec[..n-1]).to_string();
+                    print!("\x1B[1;37mPlayers: \x1B[0m");
+                    for player in all_players.split(";") {
+                        print!("{}, ", player.trim()); 
+                    }
+                    println!();
+                    player.stream.write_all(&[5u8]).unwrap();
+                }
+
+                //game "logic"
                 if vec[n-1] == 3 {                    
                     loop {
                         println!("Select a card [card from deck or 'abheben']:");
@@ -170,7 +193,12 @@ fn listen(mut player: Player) {
 fn main() {
     
 
-    let stream = std::net::TcpStream::connect(IPPORT).unwrap();
+    let mut stream = std::net::TcpStream::connect(IPPORT).unwrap();
+
+    let mut username = String::new();
+    println!("Enter username: ");
+    std::io::stdin().read_line(&mut username).unwrap();
+    stream.write_all(username.as_bytes()).unwrap();
 
     listen(Player::new(stream));
     
