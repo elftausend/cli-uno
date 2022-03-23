@@ -142,6 +142,7 @@ fn listen(mut player: Player) {
                     player.stream.write_all(&[5u8]).unwrap();
                 }
 
+                //winning
                 if vec[n-1] == 12 {
                     let current_player = String::from_utf8_lossy(&vec[..n-1]).to_string();
                     println!("\x1B[1;93m{}\x1B[0m has won this round!", current_player.trim_end());
@@ -184,8 +185,7 @@ fn listen(mut player: Player) {
                             println!("Invalid card!");
                             continue;
                         }
-                        
-                        
+                                         
                     }
                
                 }
@@ -202,7 +202,6 @@ fn listen(mut player: Player) {
 }
 
 fn main() {
-    
 
     let mut stream = std::net::TcpStream::connect(IPPORT).unwrap();
 
